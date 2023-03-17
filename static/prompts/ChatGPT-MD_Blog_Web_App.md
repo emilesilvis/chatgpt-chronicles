@@ -1314,3 +1314,429 @@ def get_prompt_data():
 ```
 
 After making this change, restart the server and check if the About page displays a list of links for downloading the Markdown files in the "static/prompts" folder without any errors.
+
+
+#### You:
+I need to deploy this app to Heroku.
+
+There is also a scheduler task that needs be run defined by the `scheduler.py`.
+
+#### ChatGPT:
+To deploy your Flask app to Heroku, follow these steps:
+
+1. Install the Heroku CLI on your local machine, if you haven't already. You can find the installation instructions here: <https://devcenter.heroku.com/articles/heroku-cli>
+
+2. Install `gunicorn` in your project as it will be used to serve your app on Heroku:
+
+```sh
+pip install gunicorn
+```
+
+3. Create a `requirements.txt` file to list your project's dependencies:
+
+```sh
+pip freeze > requirements.txt
+```
+
+4. Create a `Procfile` in the root directory of your project. This file will tell Heroku how to run your app:
+
+```
+web: gunicorn app:app
+```
+
+5. Create a `runtime.txt` file in the root directory of your project to specify the Python version. Replace `x.x.x` with your desired Python version (e.g., `3.9.7`):
+
+```
+python-x.x.x
+```
+
+6. Initialize a Git repository in your project folder, if you haven't already:
+
+```sh
+git init
+```
+
+7. Add all files and commit the changes:
+
+```sh
+git add .
+git commit -m "Initial commit for Heroku deployment"
+```
+
+8. Log in to your Heroku account using the Heroku CLI:
+
+```sh
+heroku login
+```
+
+9. Create a new Heroku app:
+
+```sh
+heroku create your-app-name
+```
+
+10. Push your project to Heroku:
+
+```sh
+git push heroku master
+```
+
+Your app should now be deployed on Heroku. You can open it using:
+
+```sh
+heroku open
+```
+
+For the `scheduler.py` task, you can use Heroku Scheduler add-on to run scheduled tasks. Here's how to set it up:
+
+1. Add the Heroku Scheduler add-on to your app:
+
+```sh
+heroku addons:create scheduler:standard
+```
+
+2. Open the Heroku Scheduler dashboard:
+
+```sh
+heroku addons:open scheduler
+```
+
+3. Click "Add new job" and enter the command to run your scheduler task. If the task is defined as a function in your `scheduler.py` file, you can run it using the following command:
+
+```
+python scheduler.py
+```
+
+4. Set the frequency of your task (e.g., every 10 minutes, every hour, or daily) and save the job.
+
+Your scheduled task should now run according to the specified frequency on Heroku.
+
+
+#### You:
+After deploying to Heroku, I realise there's a problem. Heroku has an ephemeral filesystem, so saving the posts in MD on the filesystem does not work. Can we do something simple?
+
+#### ChatGPT:
+Yes, you can use a simple cloud-based storage service like Amazon S3 to store your Markdown files instead of the local filesystem. This will work well with Heroku's ephemeral filesystem.
+
+Here's how to set up your Flask app to use Amazon S3 for storing your Markdown files:
+
+1. Sign up for an AWS account if you haven't already: <https://aws.amazon.com/>
+
+2. Create an S3 bucket in the AWS Management Console: <https://s3.console.aws.amazon.com/s3/home>
+
+3. Install the `boto3` library to interact with the S3 service:
+
+```sh
+pip install boto3
+```
+
+4. Update your `requirements.txt` file:
+
+```sh
+pip freeze > requirements.txt
+```
+
+5. Set up AWS credentials by configuring the AWS CLI. If you don't have the AWS CLI installed, you can follow these instructions to install it: <https://aws.amazon.com/cli/>
+
+```sh
+aws configure
+```
+
+6. In your `app.py` file, import the required libraries and set up the S3 client:
+
+```python
+import boto3
+from botocore.exceptions import NoCredentialsError
+
+s3 = boto3.client('s3')
+```
+
+7. Replace the `get_post_data()` and `get_prompt_data()` functions in your `app.py` with the following code:
+
+```python
+def get_post_data():
+    bucket_name = 'your-bucket-name'
+    prefix = 'posts/'
+
+    try:
+        post_objects = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        post_data = []
+        for obj in post_objects.get('Contents', []):
+            if obj['Key'].lower().endswith('.md'):
+                raw_title = os.path.basename(obj['Key'])[:-3]
+                post_date, title, increment = parse_title(raw_title)
+                post_content = s3.get_object(Bucket=bucket_name, Key=obj['Key'])['Body'].read().decode('utf-8')
+                post_data.append({
+                    'raw_title': raw_title,
+                    'title': title,
+                    'date': post_date,
+                    'increment': increment,
+                    'content': post_content
+                })
+
+        post_data.sort(key=lambda x: (x['date'], x['increment']), reverse=True)
+        return post_data
+
+    except NoCredentialsError:
+        print("No AWS credentials found")
+        return []
+
+def get_prompt_data():
+    bucket_name = 'your-bucket-name'
+    prefix = 'prompts/'
+
+    try:
+        prompt_objects = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        prompt_data = []
+        for obj in prompt_objects.get('Contents', []):
+            if obj['Key'].lower().endswith('.md'):
+                raw_title = os.path.basename(obj['Key'])[:-3]
+                prompt_content = s3.get_object(Bucket=bucket_name, Key=obj['Key'])['Body'].read().decode('utf-8')
+                prompt_data.append({
+                    'title': raw_title,
+                    'content': prompt_content,
+                    'filename': os.path.join("prompts", raw_title + ".md")
+                })
+
+        return prompt_data
+
+    except NoCredentialsError:
+        print("No AWS credentials found")
+        return []
+```
+
+Make sure to replace `'your-bucket-name'` with the actual name of the S3 bucket you created.
+
+8. Upload your existing Markdown files to the S3 bucket. You can do this through the AWS Management Console, or using the AWS CLI:
+
+```sh
+aws s3 cp /path/to/your/local/posts/ s3://your-bucket-name/posts/ --recursive
+aws s3 cp /path/to/your/local/prompts/ s
+```
+
+
+#### You:
+Where do I give the script access to AWS credentials?
+
+#### ChatGPT:
+To provide AWS credentials to your Flask app running on Heroku, you can use environment variables. Here's how to set it up:
+
+1. In your `app.py` file, import the `os` library if it is not already imported:
+
+```python
+import os
+```
+
+2. Update the S3 client setup to use environment variables for AWS credentials:
+
+```python
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    region_name=os.environ.get('AWS_REGION')
+)
+```
+
+3. Add your AWS credentials to Heroku as config variables. Replace `YOUR_AWS_ACCESS_KEY_ID`, `YOUR_AWS_SECRET_ACCESS_KEY`, and `YOUR_AWS_REGION` with your actual AWS credentials and region:
+
+```sh
+heroku config:set AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
+heroku config:set AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+heroku config:set AWS_REGION=YOUR_AWS_REGION
+```
+
+4. Commit your changes to your Git repository:
+
+```sh
+git add app.py
+git commit -m "Update app.py to use AWS credentials from environment variables"
+```
+
+5. Push your changes to Heroku:
+
+```sh
+git push heroku master
+```
+
+Your Flask app should now have access to your AWS credentials through the environment variables, and you should be able to interact with the S3 bucket from the Heroku-deployed app.
+
+For local development, you can add the environment variables to a `.env` file in the root directory of your project:
+
+```
+AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+AWS_REGION=YOUR_AWS_REGION
+```
+
+Make sure to add the `.env` file to your `.gitignore` file, so it's not pushed to the Git repository:
+
+```
+# .gitignore
+.env
+```
+
+To use the environment variables from the `.env` file, you'll need to install the `python-dotenv` package:
+
+```sh
+pip install python-dotenv
+```
+
+Then, add the following lines to your `app.py` file, after the `import os` line:
+
+```python
+from dotenv import load_dotenv
+
+load_dotenv()
+```
+
+Now your Flask app can access the AWS credentials from the `.env` file during local development.
+
+
+#### You:
+How do I find AWS credentials for the app to access the S3 bucket?
+
+#### ChatGPT:
+To find and create AWS credentials for your app to access the S3 bucket, follow these steps:
+
+1. Log in to the AWS Management Console: <https://aws.amazon.com/console/>
+
+2. Navigate to the Identity and Access Management (IAM) service: <https://console.aws.amazon.com/iam/home>
+
+3. In the left sidebar, click on "Users."
+
+4. Click on the "Add user" button.
+
+5. Provide a username for your new user (e.g., `your-app-name-s3-user`) and select "Programmatic access" for the "Access type." Click "Next: Permissions."
+
+6. Click on the "Attach existing policies directly" tab, and search for the "AmazonS3FullAccess" policy in the search box. Check the box next to the "AmazonS3FullAccess" policy. If you want to limit the user's access to a specific S3 bucket, you can create a custom policy instead. Click "Next: Tags."
+
+7. (Optional) Add any tags you'd like to associate with the user. Click "Next: Review."
+
+8. Review the user details and permissions, and click on the "Create user" button.
+
+9. After the user is created, you will see the "Success" screen, which displays the "Access key ID" and "Secret access key" for the new user. **Make sure to download the .csv file or copy the credentials immediately, as you will not be able to view the "Secret access key" again.**
+
+Now you have the AWS credentials (Access key ID and Secret access key) for your app to access the S3 bucket. Use these credentials to set up environment variables as described in my previous response.
+
+Remember not to share or expose these credentials publicly, as they provide full access to your S3 resources. Always store them securely and keep them private.
+
+
+#### You:
+I get an error: ModuleNotFoundError: No module named 'dotenv'
+
+#### ChatGPT:
+It seems that the `python-dotenv` package is not installed. To fix this issue, follow these steps:
+
+1. Install the `python-dotenv` package using pip:
+
+```sh
+pip install python-dotenv
+```
+
+2. Update your `requirements.txt` file to include the new package:
+
+```sh
+pip freeze > requirements.txt
+```
+
+3. Add and commit the changes to your Git repository:
+
+```sh
+git add requirements.txt
+git commit -m "Add python-dotenv to requirements.txt"
+```
+
+4. Push your changes to Heroku:
+
+```sh
+git push heroku master
+```
+
+Now your app should be able to find and use the `dotenv` module. Make sure you've added the `from dotenv import load_dotenv` and `load_dotenv()` lines in your `app.py` file, as mentioned in a previous response. This will load the environment variables from your `.env` file during local development.
+
+
+#### You:
+I get an error:
+
+NameError
+NameError: name 'parse_title' is not defined
+
+#### ChatGPT:
+It appears that the `parse_title` function is not defined in your code. Please add the following function definition to your `app.py` file:
+
+```python
+import re
+
+def parse_title(title):
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
+    increment_match = re.search(r'_(\d+)\.', title)
+    if date_match and increment_match:
+        date = date_match.group(1)
+        increment = increment_match.group(1)
+        formatted_date = '-'.join(reversed(date.split('-')))
+        return f'{formatted_date}-{increment}'
+    elif date_match:
+        date = date_match.group(1)
+        formatted_date = '-'.join(reversed(date.split('-')))
+        return formatted_date
+    else:
+        return title
+```
+
+This function uses regular expressions to parse the date and increment (if present) from the title and then formats them as requested (DD-MM-YYYY).
+
+Make sure to import the `re` module at the top of your `app.py` file if it's not already imported:
+
+```python
+import re
+```
+
+After adding the `parse_title` function, your application should work as expected.
+
+
+#### You:
+I get the the following error:
+
+ValueError
+ValueError: too many values to unpack (expected 3)
+
+Traceback (most recent call last)
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 2551, in __call__
+return self.wsgi_app(environ, start_response)
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 2531, in wsgi_app
+response = self.handle_exception(e)
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 2528, in wsgi_app
+response = self.full_dispatch_request()
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 1825, in full_dispatch_request
+rv = self.handle_user_exception(e)
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 1823, in full_dispatch_request
+rv = self.dispatch_request()
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/.venv/lib/python3.10/site-packages/flask/app.py", line 1799, in dispatch_request
+return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/app.py", line 98, in about
+posts = get_post_data()
+File "/Users/emiles/Dropbox/My Mac (bb-system-1611)/Desktop/blog/app.py", line 54, in get_post_data
+post_date, title, increment = parse_title(raw_title)
+ValueError: too many values to unpack (expected 3)
+
+#### ChatGPT:
+I apologize for the confusion. I see that the error occurs because the `parse_title` function returns a single string, but in the `get_post_data` function, we are trying to unpack it into three variables.
+
+To fix this issue, update the `parse_title` function in your `app.py` file to return the date, title, and increment as a tuple:
+
+```python
+import re
+
+def parse_title(title):
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
+    increment_match = re.search(r'_(\d+)\.', title)
+    post_date, increment = None, None
+    if date_match:
+        post_date = date_match.group(1)
+    if increment_match:
+        increment = increment_match.group(1)
+    return post_date, title, increment
+```
+
+Now, the `parse_title` function should return the expected values, and the `get_post_data` function should work without raising the ValueError.
