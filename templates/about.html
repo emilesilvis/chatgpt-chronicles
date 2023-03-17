@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}About - ChatGPT Chronicles{% endblock %}
+
+{% block content %}
+  <h1>About</h1>
+  <p>This app gets the top HackerNews article once a day and writes a 500-word blog post about it using ChatGPT. These articles are then published on this web app.
+
+    It has been entirely built by me chatting to ChatGPT (GPT-4).
+
+    Below you can find the prompts used to create it.
+  </p>
+
+  <p>Below the prompts used to create it.</p>
+
+  {% for prompt in prompts %}
+  <section>
+    <a href="{{ url_for('static', filename=prompt.filename) }}" download>{{ prompt.title }}.md</a>
+  </section>
+{% endfor %}
+
+{% endblock %}
