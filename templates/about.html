@@ -4,14 +4,11 @@
 
 {% block content %}
   <h1>About</h1>
-  <p>This app gets the top HackerNews article once a day and writes a 500-word blog post about it using ChatGPT. The articles are stored in S3 and published on this web app.
+  <p>This app gets the top HackerNews article once a day and writes a 500-word blog post about it using ChatGPT. The articles are stored in S3 and published on this Python web app.</p>
 
-    It has been entirely built by me chatting to ChatGPT (GPT-4).
+  <p><strong>It has been <i>entirely</i> built by me chatting to ChatGPT (GPT-4) and copying and pasting responses into text files. I  did not write a single line of Python or HTML.</strong></p>
 
-    Below you can find the prompts used to create it.
-  </p>
-
-  <p>Below the prompts used to create it.</p>
+  <p>Below you can find the ChatGPT chats that lead to its creation:</p>
 
   {% for prompt in prompts %}
   <section>
