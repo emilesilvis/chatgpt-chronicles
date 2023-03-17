@@ -4,6 +4,18 @@ import os
 import re
 import glob
 from datetime import datetime
+import boto3
+from botocore.exceptions import NoCredentialsError
+from dotenv import load_dotenv
+
+load_dotenv()
+
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    # region_name=os.environ.get('AWS_REGION')
+)
 
 app = Flask(__name__, static_url_path='/static')
 
@@ -11,35 +23,44 @@ Misaka(app)
 
 import os.path
 
+import re
+
+def parse_title(title):
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
+    increment_match = re.search(r'_(\d+)\.', title)
+    post_date, increment = None, None
+    if date_match:
+        post_date = date_match.group(1)
+    if increment_match:
+        increment = increment_match.group(1)
+    return post_date, title, increment
+
 def get_post_data():
-    post_files = glob.glob("posts/*.md")
-    post_files.sort(key=os.path.getctime, reverse=True)
-    posts = []
+    bucket_name = 'chatgpt-chronicles'
+    # prefix = 'posts/'
 
-    for file in post_files:
-        with open(file, "r") as f:
-            content = f.read()
-            raw_title = os.path.basename(file)[:-3]
-            date_created = re.search(r'\d{4}-\d{2}-\d{2}', raw_title).group()
-            increment = re.search(r'_blog_post_(\d+)', raw_title)
-            increment = int(increment.group(1)) if increment else 0
+    try:
+        post_objects = s3.list_objects_v2(Bucket=bucket_name)
+        post_data = []
+        for obj in post_objects.get('Contents', []):
+            if obj['Key'].lower().endswith('.md'):
+                raw_title = os.path.basename(obj['Key'])[:-3]
+                post_date, title, increment = parse_title(raw_title)
+                post_content = s3.get_object(Bucket=bucket_name, Key=obj['Key'])['Body'].read().decode('utf-8')
+                post_data.append({
+                    'raw_title': raw_title,
+                    'title': title,
+                    'date': post_date,
+                    'increment': increment,
+                    'content': post_content
+                })
 
-            formatted_date = datetime.strptime(date_created, '%Y-%m-%d').strftime('%d-%m-%Y')
-            formatted_title = f"{formatted_date}"
-            if increment:
-                formatted_title += f" ({increment})"
-            else:
-                formatted_title += f""
+        post_data.sort(key=lambda x: (x['date'], x['increment']), reverse=True)
+        return post_data
 
-            post = {
-                "title": formatted_title,
-                "content": content,
-                "date_created": datetime.strptime(date_created, '%Y-%m-%d'),
-                "increment": increment
-            }
-            posts.append(post)
-
-    return posts
+    except NoCredentialsError:
+        print("No AWS credentials found")
+        return []
 
 import os
 

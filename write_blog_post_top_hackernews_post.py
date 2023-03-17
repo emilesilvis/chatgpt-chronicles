@@ -3,9 +3,10 @@ from bs4 import BeautifulSoup
 import openai
 from datetime import datetime
 import os
+import boto3
 
 # Replace with your OpenAI API key
-openai.api_key = "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"
+openai.api_key = os.environ.get("OPENAI_KEY")
 
 # Get the first link from the 'Best' page on Hacker News
 url = "https://news.ycombinator.com/best"
@@ -49,3 +50,18 @@ with open(file_path, "w", encoding="utf-8") as file:
     file.write(blog_post)
 
 print(f"Blog post saved to {file_path}")
+
+# Save the blog post to an S3 bucket
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+)
+
+s3_bucket = os.environ.get('S3_BUCKET')
+s3_key = f"{filename}"
+
+with open(file_path, "rb") as file:
+    s3.upload_fileobj(file, s3_bucket, s3_key)
+
+print(f"Blog post uploaded to S3 bucket '{s3_bucket}' with key '{s3_key}'")
